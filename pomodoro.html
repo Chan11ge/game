@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番茄钟 - Pomodoro Timer</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --primary: #e94560;
+    --primary-glow: rgba(233, 69, 96, 0.35);
+    --accent: #0f3460;
+    --text: #eee;
+    --text-dim: #888;
+    --work-color: #e94560;
+    --break-color: #4caf50;
+    --long-break-color: #2196f3;
+    --ring-bg: #2a2a4a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: radial-gradient(ellipse at 50% 0%, #1e2844 0%, #1a1a2e 50%, #14142a 100%);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+
+  .bg-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .bg-orb-1 {
+    width: 500px; height: 500px;
+    background: var(--primary);
+    top: -20%; left: -10%;
+    animation: orbFloat1 20s ease-in-out infinite;
+  }
+  .bg-orb-2 {
+    width: 400px; height: 400px;
+    background: var(--break-color);
+    bottom: -15%; right: -8%;
+    animation: orbFloat2 25s ease-in-out infinite;
+  }
+  .bg-orb-3 {
+    width: 300px; height: 300px;
+    background: var(--long-break-color);
+    top: 50%; left: 60%;
+    animation: orbFloat3 22s ease-in-out infinite;
+  }
+
+  @keyframes orbFloat1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(40px, -30px) scale(1.08); }
+    66% { transform: translate(-20px, 20px) scale(0.94); }
+  }
+  @keyframes orbFloat2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(-30px, -40px) scale(1.06); }
+    66% { transform: translate(25px, 15px) scale(0.96); }
+  }
+  @keyframes orbFloat3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-35px, 25px) scale(1.1); }
+  }
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Mode tabs */
+  .modes {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border-radius: 32px;
+    padding: 4px;
+  }
+  .mode-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 10px 22px;
+    border-radius: 28px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    transition: all 0.25s;
+  }
+  .mode-btn.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 15px var(--primary-glow);
+  }
+  .mode-btn:not(.active):hover {
+    color: var(--text);
+  }
+
+  /* Time settings */
+  .settings-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .setting-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .setting-item label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .setting-item input {
+    width: 52px;
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+    -moz-appearance: textfield;
+  }
+  .setting-item input::-webkit-outer-spin-button,
+  .setting-item input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .setting-item input:focus {
+    border-color: var(--primary);
+  }
+
+  /* Timer ring */
+  .timer-wrapper {
+    position: relative;
+    width: 300px;
+    height: 300px;
+  }
+  .timer-wrapper.stopwatch-layout {
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .timer-ring {
+    transform: rotate(-90deg);
+    width: 100%;
+    height: 100%;
+  }
+  .timer-wrapper.stopwatch-layout .timer-ring {
+    display: none;
+  }
+  .ring-bg {
+    fill: none;
+    stroke: var(--ring-bg);
+    stroke-width: 6;
+  }
+  .ring-progress {
+    fill: none;
+    stroke: var(--work-color);
+    stroke-width: 6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s linear, stroke 0.4s;
+  }
+  .ring-progress.break { stroke: var(--break-color); }
+  .ring-progress.long-break { stroke: var(--long-break-color); }
+
+  .clock-face {
+    width: 260px;
+    height: 260px;
+    display: block;
+  }
+
+  .timer-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .timer-wrapper.stopwatch-layout .timer-display {
+    position: static;
+    inset: auto;
+  }
+  .timer-wrapper.alarm-layout .timer-display {
+    position: static;
+    inset: auto;
+  }
+  .timer-wrapper.alarm-layout {
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .timer-display.stopwatch-mode .time {
+    font-size: 44px;
+    letter-spacing: 1px;
+  }
+  .timer-display.stopwatch-mode .status-label {
+    margin-top: 2px;
+  }
+  .time {
+    font-size: 64px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .time.precise {
+    font-size: 44px;
+    letter-spacing: 1px;
+  }
+  .status-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .btn {
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .btn-play {
+    width: 64px;
+    height: 64px;
+    background: var(--primary);
+    box-shadow: 0 6px 24px var(--primary-glow);
+  }
+  .btn-play:hover {
+    transform: scale(1.08);
+    box-shadow: 0 8px 30px var(--primary-glow);
+  }
+  .btn-play:active { transform: scale(0.95); }
+  .btn-play svg { width: 28px; height: 28px; fill: #fff; }
+
+  .btn-small {
+    width: 44px;
+    height: 44px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .btn-small:hover { background: #253a5e; }
+  .btn-small:active { transform: scale(0.93); }
+  .btn-small svg { width: 20px; height: 20px; fill: var(--text); }
+
+  /* Session counter */
+  .sessions {
+    display: flex;
+    gap: 8px;
+  }
+  .session-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ring-bg);
+    transition: background 0.3s;
+  }
+  .session-dot.done { background: var(--primary); }
+
+  /* Session label */
+  .session-info {
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+  .session-info span {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Notification permission hint */
+  .notify-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  .notify-hint:hover { opacity: 1; }
+  .notify-hint.enabled { color: var(--break-color); }
+
+  /* Alarm panel */
+  .alarm-panel {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .alarm-panel input[type="time"] {
+    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    outline: none;
+    transition: border-color 0.2s;
+    color-scheme: dark;
+  }
+  .alarm-panel input[type="time"]:focus {
+    border-color: var(--primary);
+  }
+  .alarm-btn {
+    border: none;
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.2s;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .alarm-btn:hover { background: #253a5e; }
+  .alarm-btn.set {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 15px var(--primary-glow);
+  }
+  .alarm-btn.set:hover { opacity: 0.9; }
+
+  /* Alarm list */
+  .alarm-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-width: 220px;
+  }
+  .alarm-list-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 8px;
+    letter-spacing: 0.5px;
+  }
+  .alarm-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-variant-numeric: tabular-nums;
+    transition: all 0.2s;
+  }
+  .alarm-item .alarm-item-time {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+  .alarm-item .alarm-item-del {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 50%;
+    transition: all 0.15s;
+  }
+  .alarm-item .alarm-item-del:hover {
+    color: var(--primary);
+    background: rgba(233, 69, 96, 0.15);
+  }
+
+  /* Alarm overlay */
+  .alarm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s;
+  }
+  .alarm-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .alarm-card {
+    background: var(--surface);
+    border-radius: 24px;
+    padding: 40px 48px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transform: scale(0.85);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .alarm-overlay.active .alarm-card {
+    transform: scale(1);
+  }
+  .alarm-card .alarm-icon {
+    font-size: 56px;
+    margin-bottom: 12px;
+  }
+  .alarm-card .alarm-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .alarm-card .alarm-time-label {
+    font-size: 42px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    color: var(--primary);
+    margin-bottom: 24px;
+  }
+  .alarm-card .btn-stop-alarm {
+    border: none;
+    border-radius: 24px;
+    padding: 12px 40px;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 6px 24px var(--primary-glow);
+    transition: all 0.2s;
+  }
+  .alarm-card .btn-stop-alarm:hover {
+    transform: scale(1.06);
+    box-shadow: 0 8px 30px var(--primary-glow);
+  }
+  .alarm-card .btn-stop-alarm:active { transform: scale(0.95); }
+
+  /* Lap list */
+  .lap-section {
+    width: 100%;
+    max-width: 260px;
+    display: none;
+  }
+  .lap-list {
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ring-bg) transparent;
+  }
+  .lap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: var(--text-dim);
+    transition: background 0.15s;
+  }
+  .lap-item:hover { background: var(--surface); }
+  .lap-item .lap-num {
+    font-weight: 500;
+    color: var(--text-dim);
+    min-width: 32px;
+  }
+  .lap-item .lap-time {
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 1px;
+  }
+  .lap-item:first-child .lap-time { color: var(--primary); }
+
+  /* Stopwatch hints */
+  .stopwatch-hints {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    margin-top: -16px;
+  }
+  .stopwatch-hints span {
+    width: 44px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+  .stopwatch-hints .hint-play {
+    width: 64px;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+<div class="bg-orb bg-orb-3"></div>
+
+<div class="container">
+  <div class="modes">
+    <button class="mode-btn active" data-mode="work">专注</button>
+    <button class="mode-btn" data-mode="break">短休</button>
+    <button class="mode-btn" data-mode="long-break">长休</button>
+    <button class="mode-btn" data-mode="stopwatch">计时</button>
+    <button class="mode-btn" data-mode="alarm">闹钟</button>
+  </div>
+
+  <div id="pomodoroExtras">
+    <div class="settings-row">
+    <div class="setting-item">
+      <label>专注(分)</label>
+      <input type="number" id="setWork" value="25" min="1" max="120">
+    </div>
+    <div class="setting-item">
+      <label>短休(分)</label>
+      <input type="number" id="setBreak" value="5" min="1" max="60">
+    </div>
+    <div class="setting-item">
+      <label>长休(分)</label>
+      <input type="number" id="setLongBreak" value="15" min="1" max="120">
+    </div>
+  </div>
+  </div>
+
+  <div class="timer-wrapper" id="timerWrapper">
+    <svg class="timer-ring" id="timerRing" viewBox="0 0 200 200">
+      <circle class="ring-bg" cx="100" cy="100" r="94"/>
+      <circle class="ring-progress" cx="100" cy="100" r="94"
+              stroke-dasharray="590.62" stroke-dashoffset="0"/>
+    </svg>
+    <svg class="clock-face" id="clockFace" viewBox="0 0 200 200" style="display:none">
+      <circle cx="100" cy="100" r="90" fill="none" stroke="var(--ring-bg)" stroke-width="2"/>
+      <g id="clockTicks"></g>
+      <line id="minHand" x1="100" y1="100" x2="100" y2="42" stroke="#ccc" stroke-width="3" stroke-linecap="round"/>
+      <line id="secHand" x1="100" y1="108" x2="100" y2="22" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="100" cy="100" r="5" fill="var(--primary)"/>
+    </svg>
+    <div class="timer-display" id="timerDisplay">
+      <div class="time" id="timeDisplay">25:00</div>
+      <div class="status-label" id="statusLabel">准备开始</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-small" id="btnReset" title="重置">
+      <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+    </button>
+    <button class="btn btn-play" id="btnPlay" title="开始">
+      <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="pauseIcon" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
+    <button class="btn btn-small" id="btnSkip" title="跳过">
+      <svg id="skipIcon" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
+      <svg id="lapIcon" viewBox="0 0 24 24" style="display:none"><path d="M17 4h-3V2h-4v2H7v14h4v-2h2v2h4V4zM6 6h2v10H6V6zm10 0h2v10h-2V6z"/></svg>
+    </button>
+  </div>
+
+  <div class="stopwatch-hints" id="stopwatchHints" style="display:none">
+    <span>重置</span>
+    <span class="hint-play">开始/暂停</span>
+    <span>计次</span>
+  </div>
+
+  <div class="lap-section" id="lapSection">
+    <div class="lap-list" id="lapList"></div>
+  </div>
+
+  <div id="pomodoroBottom">
+    <div class="sessions" id="sessionDots">
+      <div class="session-dot"></div>
+      <div class="session-dot"></div>
+      <div class="session-dot"></div>
+      <div class="session-dot"></div>
+    </div>
+    <div class="session-info" id="sessionInfo">完成 <span>0</span> 个番茄</div>
+  </div>
+
+  <div class="alarm-panel" id="alarmPanel" style="display:none">
+    <input type="time" id="alarmTimeInput">
+    <button class="alarm-btn set" id="btnSetAlarm">添加</button>
+    <button class="alarm-btn" id="btnClearAlarm">清空</button>
+  </div>
+  <div class="alarm-list" id="alarmList"></div>
+  <div class="notify-hint" id="notifyHint" title="点击启用桌面通知">点击启用桌面通知</div>
+</div>
+
+<div class="alarm-overlay" id="alarmOverlay" onclick="if(event.target===this)stopAlarm()">
+  <div class="alarm-card">
+    <div class="alarm-icon">⏰</div>
+    <div class="alarm-title">闹钟响铃</div>
+    <div class="alarm-time-label" id="alarmOverlayTime">00:00</div>
+    <button class="btn-stop-alarm" id="btnStopAlarm">停止闹钟</button>
+  </div>
+</div>
+
+<audio id="alarmSound" preload="auto"></audio>
+
+<script>
+  const TIMES = { work: 25 * 60, break: 5 * 60, 'long-break': 15 * 60 };
+  const LABELS = { work: '专注中', break: '休息中', 'long-break': '长休息' };
+  const CIRCUMFERENCE = 2 * Math.PI * 94; // ~590.62
+
+  let mode = 'work';
+  let timeLeft = TIMES[mode];
+  let totalTime = TIMES[mode];
+  let timerId = null;
+  let running = false;
+  let completedSessions = 0;
+  let audioCtx = null;
+  let notificationsEnabled = false;
+  let stopwatchElapsed = 0;
+  let alarmTimes = [];
+  let triggeredAlarms = new Set();
+  let ringingAlarm = null;
+  let alarmSoundId = null;
+  let laps = [];
+
+  // DOM
+  const timeDisplay = document.getElementById('timeDisplay');
+  const statusLabel = document.getElementById('statusLabel');
+  const btnPlay = document.getElementById('btnPlay');
+  const playIcon = document.getElementById('playIcon');
+  const pauseIcon = document.getElementById('pauseIcon');
+  const btnReset = document.getElementById('btnReset');
+  const btnSkip = document.getElementById('btnSkip');
+  const ringProgress = document.querySelector('.ring-progress');
+  const sessionDots = document.getElementById('sessionDots');
+  const sessionInfo = document.getElementById('sessionInfo');
+  const notifyHint = document.getElementById('notifyHint');
+  const alarmSound = document.getElementById('alarmSound');
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  const setWork = document.getElementById('setWork');
+  const setBreak = document.getElementById('setBreak');
+  const setLongBreak = document.getElementById('setLongBreak');
+  const pomodoroExtras = document.getElementById('pomodoroExtras');
+  const pomodoroBottom = document.getElementById('pomodoroBottom');
+  const settingsRow = document.querySelector('.settings-row');
+  const alarmPanel = document.getElementById('alarmPanel');
+  const alarmTimeInput = document.getElementById('alarmTimeInput');
+  const btnSetAlarm = document.getElementById('btnSetAlarm');
+  const btnClearAlarm = document.getElementById('btnClearAlarm');
+  const skipIcon = document.getElementById('skipIcon');
+  const lapIcon = document.getElementById('lapIcon');
+  const alarmOverlay = document.getElementById('alarmOverlay');
+  const alarmOverlayTime = document.getElementById('alarmOverlayTime');
+  const btnStopAlarm = document.getElementById('btnStopAlarm');
+  const lapSection = document.getElementById('lapSection');
+  const lapList = document.getElementById('lapList');
+  const stopwatchHints = document.getElementById('stopwatchHints');
+  const alarmList = document.getElementById('alarmList');
+  const timerWrapper = document.getElementById('timerWrapper');
+  const timerRing = document.getElementById('timerRing');
+  const clockFace = document.getElementById('clockFace');
+  const clockTicks = document.getElementById('clockTicks');
+  const minHand = document.getElementById('minHand');
+  const secHand = document.getElementById('secHand');
+  const timerDisplay = document.getElementById('timerDisplay');
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  }
+
+  function formatTimeLong(s) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) {
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+    }
+    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  }
+
+  function formatStopwatch(cs) {
+    const totalSec = Math.floor(cs / 100);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    const c = cs % 100;
+    if (m >= 60) {
+      const h = Math.floor(m / 60);
+      const hm = m % 60;
+      return String(h).padStart(2, '0') + ':' + String(hm).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(c).padStart(2, '0');
+    }
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(c).padStart(2, '0');
+  }
+
+  function addLap() {
+    if (mode !== 'stopwatch' || !running) return;
+    laps.push(stopwatchElapsed);
+    renderLaps();
+  }
+
+  function renderLaps() {
+    lapList.innerHTML = laps.map((t, i) => {
+      const diff = i === 0 ? t : t - laps[i - 1];
+      return '<div class="lap-item">' +
+        '<span class="lap-num">#' + (i + 1) + '</span>' +
+        '<span class="lap-time">' + formatStopwatch(t) + '</span>' +
+        '<span style="font-size:12px;color:var(--text-dim)">+' + formatStopwatch(diff) + '</span>' +
+        '</div>';
+    }).reverse().join('');
+  }
+
+  function initClockTicks() {
+    let html = '';
+    for (let i = 0; i < 60; i++) {
+      const angle = i * 6;
+      const isMajor = i % 5 === 0;
+      const inner = isMajor ? 78 : 84;
+      const y1 = 100 - inner;
+      const y2 = 100 - 90;
+      html += '<line x1="100" y1="' + y1 + '" x2="100" y2="' + y2 + '" ' +
+        'stroke="' + (isMajor ? 'var(--text-dim)' : 'var(--ring-bg)') + '" ' +
+        'stroke-width="' + (isMajor ? '2' : '0.8') + '" stroke-linecap="round" ' +
+        'transform="rotate(' + angle + ', 100, 100)"/>';
+    }
+    clockTicks.innerHTML = html;
+  }
+
+  function renderAlarmList() {
+    if (alarmTimes.length === 0) {
+      alarmList.innerHTML = '<div class="alarm-list-empty">暂无闹钟</div>';
+      return;
+    }
+    alarmList.innerHTML = alarmTimes.map(t =>
+      '<div class="alarm-item">' +
+        '<span class="alarm-item-time">' + t + '</span>' +
+        '<button class="alarm-item-del" data-time="' + t + '" title="删除">×</button>' +
+      '</div>'
+    ).join('');
+    alarmList.querySelectorAll('.alarm-item-del').forEach(btn => {
+      btn.addEventListener('click', () => removeAlarm(btn.dataset.time));
+    });
+  }
+
+  function removeAlarm(t) {
+    alarmTimes = alarmTimes.filter(a => a !== t);
+    triggeredAlarms.delete(t);
+    if (ringingAlarm === t) stopAlarm();
+    renderAlarmList();
+  }
+
+  function loadSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('pomodoroSettings'));
+      if (saved) {
+        if (saved.work) TIMES.work = saved.work;
+        if (saved.break) TIMES.break = saved.break;
+        if (saved['long-break']) TIMES['long-break'] = saved['long-break'];
+        setWork.value = TIMES.work / 60;
+        setBreak.value = TIMES.break / 60;
+        setLongBreak.value = TIMES['long-break'] / 60;
+      }
+    } catch (_) { /* ignore corrupt data */ }
+  }
+
+  function saveSettings() {
+    localStorage.setItem('pomodoroSettings', JSON.stringify(TIMES));
+  }
+
+  function onSettingChange(newMode, minutes) {
+    const seconds = Math.max(1, parseInt(minutes) || 1) * 60;
+    TIMES[newMode] = seconds;
+    saveSettings();
+    if (mode === newMode && !running) {
+      timeLeft = seconds;
+      totalTime = seconds;
+      updateDisplay();
+      ringProgress.setAttribute('stroke-dashoffset', '0');
+    }
+  }
+
+  function updateDisplay() {
+    if (mode === 'stopwatch') {
+      timeDisplay.textContent = formatStopwatch(stopwatchElapsed);
+      const totalSec = stopwatchElapsed / 100;
+      const secAngle = totalSec * 6;
+      const minAngle = (totalSec / 60) * 6;
+      secHand.setAttribute('transform', 'rotate(' + secAngle + ', 100, 100)');
+      minHand.setAttribute('transform', 'rotate(' + minAngle + ', 100, 100)');
+    } else if (mode === 'alarm') {
+      updateClockDisplay();
+    } else {
+      timeDisplay.textContent = formatTime(timeLeft);
+      const offset = CIRCUMFERENCE * (1 - timeLeft / totalTime);
+      ringProgress.setAttribute('stroke-dashoffset', offset);
+    }
+  }
+
+  function updateClockDisplay() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    timeDisplay.textContent = h + ':' + m;
+    const sec = now.getSeconds();
+    const offset = CIRCUMFERENCE * (1 - sec / 60);
+    ringProgress.setAttribute('stroke-dashoffset', offset);
+  }
+
+  function setModeClasses() {
+    ringProgress.classList.remove('break', 'long-break');
+    if (mode === 'break') ringProgress.classList.add('break');
+    if (mode === 'long-break') ringProgress.classList.add('long-break');
+  }
+
+  function isPomodoroMode() {
+    return ['work', 'break', 'long-break'].includes(mode);
+  }
+
+  function switchMode(newMode) {
+    mode = newMode;
+    running = false;
+    clearInterval(timerId);
+    timerId = null;
+    stopAlarmSound();
+    alarmOverlay.classList.remove('active');
+    playIcon.style.display = '';
+    pauseIcon.style.display = 'none';
+
+    const pomodoro = isPomodoroMode();
+    pomodoroExtras.style.display = pomodoro ? '' : 'none';
+    pomodoroBottom.style.display = pomodoro ? '' : 'none';
+    settingsRow.style.display = pomodoro ? '' : 'none';
+    alarmPanel.style.display = mode === 'alarm' ? 'flex' : 'none';
+    btnPlay.style.display = mode === 'alarm' ? 'none' : '';
+    btnReset.style.display = mode === 'alarm' ? 'none' : '';
+    btnSkip.style.display = mode === 'alarm' ? 'none' : '';
+    skipIcon.style.display = mode === 'stopwatch' ? 'none' : '';
+    lapIcon.style.display = mode === 'stopwatch' ? '' : 'none';
+    lapSection.style.display = mode === 'stopwatch' ? 'block' : 'none';
+    stopwatchHints.style.display = mode === 'stopwatch' ? 'flex' : 'none';
+    // Toggle ring vs clock face
+    const isSw = mode === 'stopwatch';
+    const isAlarm = mode === 'alarm';
+    timerRing.style.display = (isSw || isAlarm) ? 'none' : '';
+    clockFace.style.display = isSw ? '' : 'none';
+    timerWrapper.classList.toggle('stopwatch-layout', isSw);
+    timerWrapper.classList.toggle('alarm-layout', isAlarm);
+    timerDisplay.classList.toggle('stopwatch-mode', isSw);
+    if (mode === 'stopwatch') {
+      btnSkip.title = '计次';
+      stopwatchElapsed = 0;
+      laps = [];
+      lapList.innerHTML = '';
+      timeLeft = 0;
+      totalTime = 60;
+      timeDisplay.classList.add('precise');
+      statusLabel.textContent = '计时中';
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      running = true;
+      timerId = setInterval(tick, 10);
+      playIcon.style.display = 'none';
+      pauseIcon.style.display = '';
+    } else if (mode === 'alarm') {
+      timeDisplay.classList.remove('precise');
+      triggeredAlarms.clear();
+      ringingAlarm = null;
+      alarmOverlay.classList.remove('active');
+      statusLabel.textContent = alarmTimes.length ? alarmTimes.length + ' 个闹钟' : '未设置闹钟';
+      updateClockDisplay();
+      renderAlarmList();
+      if (!timerId) timerId = setInterval(tick, 1000);
+      running = true;
+    } else {
+      timeDisplay.classList.remove('precise');
+      timeLeft = TIMES[mode];
+      totalTime = TIMES[mode];
+      statusLabel.textContent = '准备开始';
+    }
+
+    updateDisplay();
+    setModeClasses();
+    ringProgress.setAttribute('stroke-dashoffset', '0');
+    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  }
+
+  function playAlarm() {
+    // Try Web Audio API for a pleasant chime
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioCtx.currentTime;
+      [523.25, 659.25, 783.99].forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, now + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + i * 0.15);
+        osc.stop(now + i * 0.15 + 0.4);
+      });
+    } catch (_) { /* fallback: no sound */ }
+  }
+
+  function showNotification(title, body) {
+    if (notificationsEnabled && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍅</text></svg>' });
+    }
+  }
+
+  function timerComplete() {
+    running = false;
+    clearInterval(timerId);
+    timerId = null;
+    playIcon.style.display = '';
+    pauseIcon.style.display = 'none';
+    playAlarm();
+
+    if (mode === 'work') {
+      completedSessions++;
+      updateSessionDots();
+      showNotification('番茄完成！', `已完成 ${completedSessions} 个番茄，休息一下吧。`);
+      // After 4 sessions, suggest long break
+      if (completedSessions % 4 === 0) {
+        switchMode('long-break');
+      } else {
+        switchMode('break');
+      }
+    } else {
+      showNotification('休息结束！', '准备开始下一个番茄吧。');
+      switchMode('work');
+    }
+    statusLabel.textContent = '完成！';
+  }
+
+  function tick() {
+    if (mode === 'stopwatch') {
+      stopwatchElapsed++;
+      updateDisplay();
+    } else if (mode === 'alarm') {
+      updateClockDisplay();
+      checkAlarm();
+    } else {
+      if (timeLeft <= 0) {
+        timerComplete();
+        return;
+      }
+      timeLeft--;
+      updateDisplay();
+    }
+  }
+
+  function checkAlarm() {
+    if (alarmTimes.length === 0 || ringingAlarm) return;
+    const now = new Date();
+    const current = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const match = alarmTimes.find(t => t === current && !triggeredAlarms.has(t));
+    if (match) {
+      triggeredAlarms.add(match);
+      ringingAlarm = match;
+      statusLabel.textContent = '闹钟响铃！';
+      alarmOverlayTime.textContent = match;
+      alarmOverlay.classList.add('active');
+      playAlarm();
+      showNotification('闹钟', match + ' 时间到了！');
+      alarmSoundId = setInterval(playAlarm, 3000);
+    }
+  }
+
+  function stopAlarm() {
+    stopAlarmSound();
+    alarmOverlay.classList.remove('active');
+    if (ringingAlarm) {
+      alarmTimes = alarmTimes.filter(a => a !== ringingAlarm);
+      ringingAlarm = null;
+    }
+    renderAlarmList();
+    statusLabel.textContent = alarmTimes.length ? alarmTimes.length + ' 个闹钟' : '未设置闹钟';
+  }
+
+  function stopAlarmSound() {
+    if (alarmSoundId) {
+      clearInterval(alarmSoundId);
+      alarmSoundId = null;
+    }
+  }
+
+  function toggleTimer() {
+    if (mode === 'alarm') return;
+    if (running) {
+      running = false;
+      clearInterval(timerId);
+      timerId = null;
+      playIcon.style.display = '';
+      pauseIcon.style.display = 'none';
+      statusLabel.textContent = mode === 'stopwatch' ? '已暂停' : '已暂停';
+    } else {
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      running = true;
+      const interval = mode === 'stopwatch' ? 10 : 1000;
+      timerId = setInterval(tick, interval);
+      playIcon.style.display = 'none';
+      pauseIcon.style.display = '';
+      statusLabel.textContent = mode === 'stopwatch' ? '计时中' : LABELS[mode];
+    }
+  }
+
+  function resetTimer() {
+    if (mode === 'stopwatch') {
+      running = false;
+      clearInterval(timerId);
+      timerId = null;
+      stopwatchElapsed = 0;
+      laps = [];
+      lapList.innerHTML = '';
+      playIcon.style.display = '';
+      pauseIcon.style.display = 'none';
+      statusLabel.textContent = '准备开始';
+      updateDisplay();
+      ringProgress.setAttribute('stroke-dashoffset', '0');
+      return;
+    }
+    running = false;
+    clearInterval(timerId);
+    timerId = null;
+    timeLeft = TIMES[mode];
+    totalTime = TIMES[mode];
+    playIcon.style.display = '';
+    pauseIcon.style.display = 'none';
+    statusLabel.textContent = '准备开始';
+    updateDisplay();
+    ringProgress.setAttribute('stroke-dashoffset', '0');
+  }
+
+  function skipTimer() {
+    if (!isPomodoroMode()) return;
+    if (running) {
+      running = false;
+      clearInterval(timerId);
+      timerId = null;
+      timeLeft = 0;
+      timerComplete();
+    } else {
+      if (mode === 'work') {
+        switchMode('break');
+      } else {
+        switchMode('work');
+      }
+    }
+  }
+
+  function updateSessionDots() {
+    const dots = sessionDots.querySelectorAll('.session-dot');
+    dots.forEach((dot, i) => {
+      dot.classList.toggle('done', i < (completedSessions % 4));
+    });
+    if (completedSessions > 0 && completedSessions % 4 === 0) {
+      dots.forEach(d => d.classList.remove('done'));
+    }
+    sessionInfo.innerHTML = '完成 <span>' + completedSessions + '</span> 个番茄';
+  }
+
+  function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+      notifyHint.textContent = '浏览器不支持桌面通知';
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      notificationsEnabled = true;
+      notifyHint.textContent = '桌面通知已启用';
+      notifyHint.classList.add('enabled');
+    } else if (Notification.permission === 'denied') {
+      notifyHint.textContent = '桌面通知已被拒绝';
+    } else {
+      Notification.requestPermission().then(p => {
+        if (p === 'granted') {
+          notificationsEnabled = true;
+          notifyHint.textContent = '桌面通知已启用';
+          notifyHint.classList.add('enabled');
+        } else {
+          notifyHint.textContent = '桌面通知已被拒绝';
+        }
+      });
+    }
+  }
+
+  // Init notification state
+  if ('Notification' in window && Notification.permission === 'granted') {
+    notificationsEnabled = true;
+    notifyHint.textContent = '桌面通知已启用';
+    notifyHint.classList.add('enabled');
+  }
+
+  // Event listeners
+  btnPlay.addEventListener('click', toggleTimer);
+  btnReset.addEventListener('click', resetTimer);
+  btnSkip.addEventListener('click', () => {
+    if (mode === 'stopwatch') {
+      addLap();
+    } else {
+      skipTimer();
+    }
+  });
+  notifyHint.addEventListener('click', requestNotificationPermission);
+
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (running) {
+        // Stop current timer before switching
+        running = false;
+        clearInterval(timerId);
+        timerId = null;
+        playIcon.style.display = '';
+        pauseIcon.style.display = 'none';
+      }
+      switchMode(btn.dataset.mode);
+    });
+  });
+
+  // Settings inputs
+  setWork.addEventListener('change', () => onSettingChange('work', setWork.value));
+  setBreak.addEventListener('change', () => onSettingChange('break', setBreak.value));
+  setLongBreak.addEventListener('change', () => onSettingChange('long-break', setLongBreak.value));
+
+  // Alarm controls
+  btnStopAlarm.addEventListener('click', stopAlarm);
+  btnSetAlarm.addEventListener('click', () => {
+    const t = alarmTimeInput.value;
+    if (t && !alarmTimes.includes(t)) {
+      alarmTimes.push(t);
+      alarmTimes.sort();
+      triggeredAlarms.delete(t);
+      renderAlarmList();
+      statusLabel.textContent = alarmTimes.length + ' 个闹钟';
+      alarmTimeInput.value = '';
+    }
+  });
+  btnClearAlarm.addEventListener('click', () => {
+    stopAlarmSound();
+    alarmOverlay.classList.remove('active');
+    ringingAlarm = null;
+    alarmTimes = [];
+    triggeredAlarms.clear();
+    renderAlarmList();
+    statusLabel.textContent = '未设置闹钟';
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    switch (e.code) {
+      case 'Space': e.preventDefault(); toggleTimer(); break;
+      case 'KeyR': resetTimer(); break;
+      case 'KeyS': if (mode === 'stopwatch') addLap(); else skipTimer(); break;
+      case 'Digit1': switchMode('work'); break;
+      case 'Digit2': switchMode('break'); break;
+      case 'Digit3': switchMode('long-break'); break;
+      case 'Digit4': switchMode('stopwatch'); break;
+      case 'Digit5': switchMode('alarm'); break;
+      case 'Escape': if (ringingAlarm) stopAlarm(); break;
+    }
+  });
+
+  // Load saved settings
+  loadSettings();
+  timeLeft = TIMES[mode];
+  totalTime = TIMES[mode];
+
+  // Initial render
+  initClockTicks();
+  updateDisplay();
+  setModeClasses();
+  updateSessionDots();
+</script>
+</body>
+</html>
